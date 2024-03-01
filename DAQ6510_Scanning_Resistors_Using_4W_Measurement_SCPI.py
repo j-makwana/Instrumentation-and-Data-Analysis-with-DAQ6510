@@ -9,6 +9,8 @@ import time
 import datetime
 import pandas as pd
 from collections import defaultdict
+import sys
+import json
 
 echo_cmd = 1
 
@@ -169,69 +171,89 @@ def instrument_query(my_socket, my_command, receive_size):
         reading than the 2-wire method. Fixed measurement ranges are applied in order to optimize scanning
         speed and OCOMP is applied to correct for any EMF effects.
 *********************************************************************************"""
-ip_address = "169.254.243.145"     # Place your instrument's IP address here.
-my_port = 5025
+def HBBtop(data):
+	instrument_write(s, "*RST")                                     # Reset the DAQ6510
+	channel = data["HK"][0]["meter"]["channel"]
+	rangeData = data["HK"][0]["meter"]["range"]
+	nplc = data["HK"][0]["meter"]["nplc"]
+	instrument_write(s, 'SENS:FUNC "RES", (@{0})'.format(channel))
+	instrument_write(s, 'RES:RANG {0}, (@{1})'.format(rangeData, channel))
+	# set delay to 1.0 seconds
+	instrument_write(s, ":ROUTe:DEL 5.0, (@{0})".format(channel))
+	instrument_write(s, 'SENS:RES:NPLC {1}, (@{0})'.format(channel, nplc))
+	# close fixed resistor channel and my channel
+	instrument_write(s, "ROUT:CLOS (@{0},{1})".format(channel, fixed_resistor_channel))
+	myreading = instrument_query(s, "READ?", 128)
+	print("my reading is:", myreading)
+	isitclosed2 = instrument_query(s, ":ROUT:STAT? (@101:123)", 128)
+	print("is it closed:", isitclosed2)
 
+def fixedRes(data):
+	instrument_write(s, "*RST")                                     # Reset the DAQ6510
+	channel = data["HK"][1]["meter"]["channel"]
+	rangeData = data["HK"][1]["meter"]["range"]
+	nplc = data["HK"][1]["meter"]["nplc"]
+	instrument_write(s, 'SENS:FUNC "RES", (@{0})'.format(channel))
+	instrument_write(s, 'RES:RANG {0}, (@{1})'.format(rangeData, channel))
+	# set delay to 1.0 seconds
+	instrument_write(s, ":ROUTe:DEL 0, (@{0})".format(channel))
+	instrument_write(s, 'SENS:RES:NPLC {1}, (@{0})'.format(channel, nplc))
+	# close fixed resistor channel and my channel
+	instrument_write(s, "ROUT:CLOS (@{0})".format(fixed_resistor_channel))
+	myreading = instrument_query(s, "READ?", 128)
+	print("my reading is:", myreading)
+	isitclosed2 = instrument_query(s, ":ROUT:STAT? (@101:123)", 128)
+	print("is it closed:", isitclosed2)
+
+def bbSupportStruct(data):
+	instrument_write(s, "*RST")                                     # Reset the DAQ6510
+	channel = data["HK"][2]["meter"]["channel"]
+	rangeData = data["HK"][2]["meter"]["range"]
+	nplc = data["HK"][2]["meter"]["nplc"]
+	instrument_write(s, 'SENS:FUNC "RES", (@{0})'.format(channel))
+	instrument_write(s, 'RES:RANG {0}, (@{1})'.format(rangeData, channel))
+	# set delay to 1.0 seconds
+	instrument_write(s, ":ROUTe:DEL 0, (@{0})".format(channel))
+	instrument_write(s, 'SENS:RES:NPLC {1}, (@{0})'.format(channel, nplc))
+	# close my channel
+	instrument_write(s, "ROUT:CLOS (@{0})".format(channel))
+	myreading = instrument_query(s, "READ?", 128)
+	print("my reading is:", myreading)
+	isitclosed2 = instrument_query(s, ":ROUT:STAT? (@101:123)", 128)
+	print("is it closed:", isitclosed2)
+
+
+
+data= sys.argv[1]
+data= json.loads(data)
+
+
+ip_address =  data["ip_address"]   # Place your instrument's IP address here.
+my_port = data["port"]
+#fixed resistor channel
+fixed_resistor_channel = data["FR_CNL"]
+
+
+print("ip address:", ip_address)
+print("port:", my_port)
+print(data["HK"][0]["meter"])
 s = socket.socket()                 # Establish a TCP/IP socket object
 # Open the socket connection
+
+my_port = int(my_port)
 instrument_connect(s, ip_address, my_port, 20000, 0, 1)
-
-t1 = time.time()                    # Start the timer...
-
-instrument_write(s, "*RST")                                     # Reset the DAQ6510
-channel_count = 3
-scan_count = 5
-buffer_size = channel_count*scan_count
-
-instrument_write(s, "ROUT:SCAN:COUN:SCAN {0}".format(scan_count))   # Set the number of times the scan is repeated
-instrument_write(s, 'TRAC:POIN {}, "defbuffer1"'.format(buffer_size))                     # Set buffer size
-instrument_write(s, 'SENS:FUNC "RES", (@101:103)')                    # specify the channels here for the 2W function
-instrument_write(s, 'RES:RANG:AUTO ON, (@101:103)')                     # Set Auto Range on
-instrument_write(s, 'SENS:RES:NPLC 0.1, (@101:103)')                     #Set NLPC value (the higher the better but more time taken then)
-instrument_write(s, "ROUT:SCAN:CRE (@101:103)")                                     # specify which channels to scan 
-instrument_write(s,"TRAC:CLE")                                      #clear the buffer
-instrument_write(s, "INIT")                                         # Initiate the scan
-
-
-
-start_index = 1
-end_index = channel_count
-accumulated_readings = 0
-columns1= ['TimeStamp']+ ['Channel_{}'.format(i) for i in range(1,channel_count)]
-df= pd.DataFrame(columns=columns1)
-data_dict= defaultdict(list)
-
-while accumulated_readings < buffer_size:
-    time.sleep(0.5)
-    readings_count = int(instrument_query(s, "TRACe:ACTual?", 16).rstrip())
-    if readings_count >= end_index:
-        tempbuf=instrument_query(s, "TRACe:DATA? {0}, {1}, \"defbuffer1\", READ".format(start_index, end_index), 128)
-        now= datetime.datetime.now()
-        now2 = now.strftime('%Y-%m-%d %H:%M:%S.%f')
-        final_data= tempbuf.strip().split(',')
-        data_dict['TimeStamp']= now2[:-4]
-        for i, value in enumerate(final_data,1):
-            
-        	data_dict[f"Channel_{i}"] = value
-        
-        df_dictionary= pd.DataFrame([data_dict])
-        df= pd.concat([df, df_dictionary],ignore_index=True)
-
-
-        start_index += channel_count
-        end_index += channel_count
-        accumulated_readings += channel_count
+t1 = time.time()   
+#call functions
+HBBtop(data)
+fixedRes(data)
+bbSupportStruct(data)
 
 # Close the socket connection
 instrument_disconnect(s)
 t2 = time.time()
 
-
-# Notify the user of completion and the data streaming rate achieved. 
+# Notify the user of completion and the data streaming rate achieved
 print("done")
 print("Total Time Elapsed: {0:.3f} s".format(t2-t1))
-df.to_csv('Keithley_readings.csv')
-print(df)
 
-input("Press Enter to continue...")
 exit()

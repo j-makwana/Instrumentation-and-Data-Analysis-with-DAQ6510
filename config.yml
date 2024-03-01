@@ -1,0 +1,90 @@
+# IP address of the housekeeping meter
+ip_address: "169.254.243.145"
+
+# Meter type, Keithely DAQ6510 is 1
+meter_type: 1
+
+# Network port
+port: "5025"
+
+# Fixed resistor channel, this channel is held closed while  making blackbody thermistor measurements
+FR_CNL: 101
+
+# Housekeeping measurements to be made
+# var, name of variable for the hdf5 file
+# longname, description of the variable
+# units, units for the measurement
+# resolution, resolution of the measurement
+# channel, channel measurment to be made on, will be an attribute of the resistance measurement variable
+# delay, trigger delay in seconds to make the measurement, attribute of resistance variable (zero uses the default delay)
+# range, meter measurement range to use, attribute of resistance variable
+# function, 2-Wire="RES", 4-Wire="FRES", voltage="VOLT", attribute of resistance variable
+# nplc, Numbrer of power line cycles for the measurement, attribute of resistance variable
+# closed_fixed_resistor, boolen yes or no whether to hold fixed resistor closed, attribute of resistance varaible
+# coeff_res_threshold, the resistance at which you change between coefficients, 1s are used above this value, 2s are used below
+# above, the 4 Steinhart-Hart coeffients for each blackbody thermistor used to covert to temperature above the threshold
+# below, the 4 Steinhart-Hart coeffients for each blackbody thermistor used to covert to temperature below the threshold
+HK:
+  - measurement: HBBtop
+    storage:
+      var: "hotBlackbodyTopRimRes"
+      longname: "Resistance of the hot blackbody top rim thermistor"
+      units: "Ohms"
+      resolution: "0.1f"
+    meter:
+      channel: 103
+      delay: 1.0
+      range: 100000
+      function: "RES"
+      nplc: 1.0
+      closed_fixed_resistor: true
+    cal:
+      var: "hotBlackbodyTopRimTemp"
+      longname: "Temperature of the hot blackbody top rim thermistor"
+      units: "K"
+      resolution: "0.1f"
+      coeff_res_threshold: resistance_value
+      above: [a1, b1, c1, d1]
+      below: [a2, b2, c2, d2]
+  - measurement: FixedResistor
+    storage:
+      var: "fixedResistorRes"
+      longname: "Resistance of the fixed resistor mounted in the cartridge" 
+      units: "Ohms"
+      resolution: "0.1f"
+    meter:
+      channel: 101
+      delay: 0
+      range: AUTO
+      function: "RES"
+      nplc: 1.0
+      closed_fixed_resistor: false
+    cal:
+      var: "fixedResistorTemp"
+      longname: "Temperature of the fixed resistor mounted in the cartridge" 
+      units: "K"
+      resolution: "0.1f"
+      coeff_res_threshold: 0
+      above: [a1, b1, c1, d1]
+      below: [a2, b2, c2, d2]      
+  - measurment: bbSupportStruct
+    storage:
+      var: "bbSupportStructRes"
+      longname: "Resistance of the blackbody support structure"
+      units: "Ohms"
+      resolution: "0.1f"
+    meter:
+      channel: 121
+      delay: 0
+      range: AUTO
+      function: "RES"
+      nplc: 0.1
+      close_fixed_resistor: false
+    cal:
+      var: "bbSupportStructTemp"
+      longname: "Temperature of the blackbody support structure"
+      units: "K"
+      resolution: "0.1f"
+      coeff_res_threshold: resistance_value
+      above: [a1, b1, c1, d1]
+      below: [a2, b2, c2, d2]      
